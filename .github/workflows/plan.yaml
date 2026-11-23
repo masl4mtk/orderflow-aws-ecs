@@ -18,7 +18,9 @@ jobs:
 
     name: Check Terraform files are formatted correctly  
     runs-on: ubuntu-latest
-
+    defaults:
+      run:
+        working-directory: infra
     steps:
 
       - name: Checkout
@@ -36,7 +38,9 @@ jobs:
     needs: check_format
     name: Initialise and validate Terraform files
     runs-on: ubuntu-latest
-
+    defaults:
+      run:
+        working-directory: infra
     steps:
 
       - name: Checkout
@@ -62,7 +66,9 @@ jobs:
     needs: initialise_and_validate
     name: Linting Terraform files
     runs-on: ubuntu-latest
-
+    defaults:
+      run:
+        working-directory: infra
     steps:
 
       - name: Checkout
@@ -90,7 +96,7 @@ jobs:
         uses: aquasecurity/trivy-action@0.35.0
         with:
           scan-type: config
-          scan-ref: .
+          scan-ref: infra
           exit-code: 0
     
 
@@ -98,8 +104,11 @@ jobs:
     needs: security_scanning
     name: Terraform plan
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: infra
     env:
-        TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}
+      TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}
 
     steps:
       - name: Checkout

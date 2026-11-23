@@ -6,7 +6,7 @@ on:
             - main
         paths:
             - "app/**"
-            - modules/ECR/**
+            - "infra/modules/ECR/**"
     workflow_dispatch:
 
 permissions:
@@ -18,6 +18,9 @@ jobs:
     create-repos:
         name: Create ECR repositories
         runs-on: ubuntu-latest
+        defaults:
+          run:
+            working-directory: infra
         env:
             TF_VAR_domain_name: ${{ vars.DOMAIN_NAME }}
         steps:
