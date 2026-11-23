@@ -30,20 +30,23 @@ The page checks `/api/orders` every 2 seconds, so you can watch an order go from
 │   ├── worker/               SQS consumer
 │   ├── frontend/             Static page served by nginx
 │   └── elasticmq/            Local SQS emulator config (Compose only)
-├── modules/
-│   ├── networking/           VPC, subnets, NAT, security groups
-│   ├── load-balancer/        ALB, target groups, listeners
-│   ├── Route53/              ACM certificate, DNS validation, alias record
-│   ├── ECR/                  One image repository per service
-│   ├── ECS/                  Cluster, task definitions, services, log groups
-│   ├── IAM/                  Execution role and per-service task roles
-│   ├── RDS/                  PostgreSQL and the Secrets Manager password
-│   └── SQS/                  Orders queue and dead-letter queue
+├── infra/
+│   ├── modules/
+│   │   ├── networking/       VPC, subnets, NAT, security groups
+│   │   ├── load-balancer/    ALB, target groups, listeners
+│   │   ├── Route53/          ACM certificate, DNS validation, alias record
+│   │   ├── ECR/              One image repository per service
+│   │   ├── ECS/              Cluster, task definitions, services, log groups
+│   │   ├── IAM/              Execution role and per-service task roles
+│   │   ├── RDS/              PostgreSQL and the Secrets Manager password
+│   │   └── SQS/              Orders queue and dead-letter queue
+│   ├── main.tf               Root module
+│   ├── variables.tf          Input variables
+│   ├── terraform.tf          Versions and S3 backend
+│   └── terraform.tfvars.example  Example values (copy to terraform.tfvars)
 ├── bootstrap/                State bucket and the GitHub Actions OIDC role
 ├── .github/workflows/        The three pipelines
 ├── docker-compose.yaml       Local environment
-├── main.tf                   Root module
-├── terraform.tf              Versions and S3 backend
 └── .env.example              Variables for local Compose
 ```
 
@@ -76,17 +79,17 @@ Then open http://localhost:8080. Compose starts PostgreSQL and ElasticMQ (an SQS
 
 1. You need an AWS account and credentials for the first manual steps.
 2. You need a domain with a public Route 53 hosted zone for the name you want to use. If the domain is registered somewhere else, add NS records there pointing the subdomain to Route 53.
-3. Change the state bucket name in `terraform.tf` (bucket names are global) and create the bucket from `bootstrap/`.
+3. Change the state bucket name in `infra/terraform.tf` (bucket names are global) and create the bucket from `bootstrap/`.
 4. Apply `bootstrap/` to create the GitHub Actions role. It uses the GitHub OIDC provider that already exists in my account, so create that provider first if you don't have one, and change the repository in the trust policy to yours.
 5. In the GitHub repository, add two Actions variables: `AWS_ROLE_ARN` (the role from step 4) and `DOMAIN_NAME`. Also create an environment called `production` with a required reviewer, since that is the approval step for deployments.
 
 ## Pipelines
 
-All three log in to AWS with OIDC, so there are no access keys stored in GitHub. The role can only be assumed from this repository.
+The Terraform steps run from the `infra/` folder. All three log in to AWS with OIDC, so there are no access keys stored in GitHub. The role can only be assumed from this repository.
 
 | Pipeline | When it runs | What it does |
 |---|---|---|
-| Image build and push | Push to `main` that changes `app/**` or `modules/ECR/**`, or manually | Creates the ECR repositories, then builds the three images and pushes them tagged with the commit SHA |
+| Image build and push | Push to `main` that changes `app/**` or `infra/modules/ECR/**`, or manually | Creates the ECR repositories, then builds the three images and pushes them tagged with the commit SHA |
 | Plan and validate | Pull request, push to `feature/**`, or manually | Runs `terraform fmt`, `validate`, `tflint`, a Trivy scan, then `terraform plan` |
 | Deploy | After a successful image build and push | Runs `terraform plan` with the new image tag, waits for approval on the `production` environment, then runs `terraform apply` |
 
@@ -100,13 +103,14 @@ Every image is tagged with the commit SHA. When the image pipeline finishes, the
 - **Trivy only reports.** It uses `exit-code: 0`, so findings show up in the logs but don't fail the pipeline. Making it block is something I'd add next.
 - **One NAT gateway** to keep the cost down. For production I'd use one per availability zone.
 - **TLS ends at the load balancer.** Traffic between the ALB and the tasks inside the VPC is plain HTTP.
-- **Terraform-only changes don't trigger a deploy yet.** The deploy pipeline starts from the image pipeline, so a change that doesn't touch `app/` or `modules/ECR/` won't start it.
+- **Terraform-only changes don't trigger a deploy yet.** The deploy pipeline starts from the image pipeline, so a change that doesn't touch `app/` or `infra/modules/ECR/` won't start it.
 
 ## Cost and cleanup
 
 The NAT gateway, load balancer and RDS instance are billed by the hour, so destroy the stack when you're done:
 
 ```bash
+cd infra
 terraform destroy
 ```
 
